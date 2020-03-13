@@ -1,5 +1,5 @@
 {
-  "name": "udt-dapp",
+  "name": "ckb-udt-dapp",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,7 +8,12 @@
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
+    "@keyper/specs": "0.0.7",
+    "@nervosnetwork/ckb-sdk-utils": "^0.29.1",
+    "axios": "^0.19.2",
+    "bn.js": "^5.1.1",
     "core-js": "^3.6.4",
+    "element-ui": "^2.13.0",
     "vue": "^2.6.11"
   },
   "devDependencies": {
