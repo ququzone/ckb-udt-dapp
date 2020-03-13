@@ -57,9 +57,6 @@ export default {
         return false;
       }
       const [type, request] = JSON.parse(e.data.replace('42/keyper,', ''));
-      console.log(type);
-      console.log(request);
-      console.log(e.data);
       if (type === "api") {
         if (request.query === "ALL_LOCKS") {
           const locks = request.payload;
@@ -70,9 +67,10 @@ export default {
             });
             const udt = await axios.post("http://localhost:50002", {
               type: "udt",
-              typeHash: '0x2c0da3548618bc98003075f2deabd3569c4c4a1a55e63b2e7677aeed9c45c2b7',
+              typeHash: "0x2c0da3548618bc98003075f2deabd3569c4c4a1a55e63b2e7677aeed9c45c2b7",
               lockHash: lock.hash,
-            })
+            });
+            console.log(udt);
             this.tableData.push({
               address: scriptToAddress(lock.meta.script, {networkPrefix: "ckt", short: true}),
               ckb: new BN(ckb.data.total, 16).toString(),

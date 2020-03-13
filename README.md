@@ -1,4 +1,4 @@
-# udt-dapp
+# ckb-udt-dapp
 
 ## Project setup
 ```
