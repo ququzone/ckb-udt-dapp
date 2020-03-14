@@ -22,7 +22,7 @@
       <el-table-column
         label="Operations">
         <template slot-scope="scope">
-          <el-button type="primary" @click="transferFormVisible = true" v-show="scope.row.udt !== '0'" size="small">Transfer UDT</el-button>
+          <el-button type="primary" @click="showTransfer(scope.row)" v-show="scope.row.udt !== '0'" size="small">Transfer UDT</el-button>
           <el-button type="primary" @click="showBurn(scope.row)" v-show="scope.row.udt !== '0'" size="small">Burn UDT</el-button>
           <el-button type="primary" @click="showIssue(scope.row)" v-show="scope.row.lock === '0x6a242b57227484e904b4e08ba96f19a623c367dcbd18675ec6f2a71a0ff4ec26'" size="small">Issue UDT</el-button>
         </template>
@@ -48,7 +48,7 @@
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="transferFormVisible = false">Transfer</el-button>
+        <el-button type="primary" @click="transfer()">Transfer</el-button>
       </div>
     </el-dialog>
     <el-dialog title="Burn UDT" :visible.sync="burnFormVisible">
@@ -62,7 +62,7 @@
 <script>
 import BN from "bn.js";
 import axios from "axios";
-const { scriptToAddress } = require("@keyper/specs/lib/address");
+const { scriptToAddress, addressToScript } = require("@keyper/specs/lib/address");
 
 export default {
   name: 'Locks',
@@ -111,7 +111,7 @@ export default {
         if (request.event === "SEND_TX") {
           this.issueFormVisible = false;
           this.burnFormVisible = false;
-          this.transferForm = false;
+          this.transferFormVisible = false;
         }
       }
       if (type === "api") {
@@ -150,6 +150,11 @@ export default {
       this.burnForm.lock = row.lock;
       this.burnForm.meta = row.meta;
       this.burnFormVisible = true;
+    },
+    showTransfer(row) {
+      this.transferForm.lock = row.lock;
+      this.transferForm.meta = row.meta;
+      this.transferFormVisible = true;
     },
     async issue() {
       if (this.issueForm.amount <= 0) {
@@ -291,6 +296,131 @@ export default {
 
       const signObj = {
         target: this.burnForm.lock,
+        tx: rawTx,
+      };
+      
+      this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
+    },
+    async transfer() {
+      if (this.transferForm.amount <= 0) {
+        this.transferFormVisible = false;
+        return;
+      }
+      const recipientScript = addressToScript(this.transferForm.recipient);
+      const _cellCapacity = new BN(14200000000);
+      const _fee = new BN(1000);
+      const amount = new BN(this.transferForm.amount);
+      const rawTx = {
+        version: "0x0",
+        cellDeps: [{
+          outPoint: {
+            txHash: "0x78fbb1d420d242295f8668cb5cf38869adac3500f6d4ce18583ed42ff348fa64",
+            index: "0x0"
+          },
+          depType: "code",
+        }],
+        headerDeps: [],
+        inputs: [],
+        outputs: [],
+        witnesses: [],
+        outputsData: []
+      };
+      if (this.transferForm.meta.deps) {
+        this.transferForm.meta.deps.forEach(dep => {
+          rawTx.cellDeps.push(dep);
+        });
+      }
+      if (this.transferForm.meta.headers) {
+        this.transferForm.meta.headers.forEach(header => {
+          rawTx.headerDeps.push(header);
+        });
+      }
+      rawTx.outputs.push({
+        capacity: `0x${_cellCapacity.toString(16)}`,
+        lock: recipientScript,
+        type: {
+          hashType: "data",
+          codeHash: "0x48dbf59b4c7ee1547238021b4869bceedf4eea6b43772e5d66ef8865b6ae7212",
+          args: "0x6a242b57227484e904b4e08ba96f19a623c367dcbd18675ec6f2a71a0ff4ec26",
+        },
+      });
+      rawTx.outputsData.push(`0x${amount.toArrayLike(Buffer, "le", 16).toString("hex")}`);
+      let result = await axios.post("http://localhost:50002", {
+        type: "udt",
+        lockHash: this.transferForm.lock,
+        typeCodeHash: "0x48dbf59b4c7ee1547238021b4869bceedf4eea6b43772e5d66ef8865b6ae7212",
+        capacity: amount.toString(),
+      });
+      for (let i = 0; i < result.data.cells.length; i++) {
+        const element = result.data.cells[i];
+
+        rawTx.inputs.push({
+          previousOutput: {
+            txHash: element.txHash,
+            index: element.index,
+          },
+          since: "0x0",
+        });
+        rawTx.witnesses.push("0x");
+      }
+
+      let totalCKB = _cellCapacity.add(_fee);
+      let total = new BN(result.data.total, 16);
+      let gatheredCKB = new BN(result.data.totalCKB, 16);
+      if (total.gt(amount)) {
+        rawTx.outputs.push({
+          capacity: `0x${_cellCapacity.toString(16)}`,
+          lock: this.transferForm.meta.script,
+          type: {
+            hashType: "data",
+            codeHash: "0x48dbf59b4c7ee1547238021b4869bceedf4eea6b43772e5d66ef8865b6ae7212",
+            args: "0x6a242b57227484e904b4e08ba96f19a623c367dcbd18675ec6f2a71a0ff4ec26",
+          }
+        });
+        rawTx.outputsData.push(`0x${total.sub(amount).toArrayLike(Buffer, "le", 16).toString("hex")}`);
+        totalCKB = totalCKB.add(_cellCapacity);
+      }
+
+      if (gatheredCKB.lt(totalCKB)) {
+        result = await axios.post("http://localhost:50002", {
+          lockHash: this.transferForm.lock,
+          typeHash: "null",
+          data: "0x",
+          capacity: totalCKB.sub(gatheredCKB).toString(),
+        });
+        total = new BN(result.data.total, 16);
+        for (let i = 0; i < result.data.cells.length; i++) {
+          const element = result.data.cells[i];
+
+          rawTx.inputs.push({
+            previousOutput: {
+              txHash: element.txHash,
+              index: element.index,
+            },
+            since: "0x0",
+          });
+          rawTx.witnesses.push("0x");
+        }
+
+        gatheredCKB.iadd(total);
+      }
+
+      if (gatheredCKB.gt(totalCKB) && gatheredCKB.sub(totalCKB).gt(new BN(6100000000))) {
+        rawTx.outputs.push({
+          capacity: `0x${gatheredCKB.sub(totalCKB).toString(16)}`,
+          lock: this.transferForm.meta.script
+        });
+        rawTx.outputsData.push("0x");
+      }
+
+      rawTx.witnesses[0] = {
+        lock: "",
+        inputType: "",
+        outputType: "",
+      };
+
+      const signObj = {
+        target: this.transferForm.lock,
         tx: rawTx,
       };
       
