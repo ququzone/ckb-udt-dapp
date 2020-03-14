@@ -23,7 +23,7 @@
         label="Operations">
         <template slot-scope="scope">
           <el-button type="primary" @click="transferFormVisible = true" v-show="scope.row.udt !== '0'" size="small">Transfer UDT</el-button>
-          <el-button type="primary" @click="burnFormVisible = true" v-show="scope.row.udt !== '0'" size="small">Burn UDT</el-button>
+          <el-button type="primary" @click="showBurn(scope.row)" v-show="scope.row.udt !== '0'" size="small">Burn UDT</el-button>
           <el-button type="primary" @click="showIssue(scope.row)" v-show="scope.row.lock === '0x6a242b57227484e904b4e08ba96f19a623c367dcbd18675ec6f2a71a0ff4ec26'" size="small">Issue UDT</el-button>
         </template>
       </el-table-column>
@@ -52,13 +52,8 @@
       </div>
     </el-dialog>
     <el-dialog title="Burn UDT" :visible.sync="burnFormVisible">
-      <el-form :model="burnForm">
-        <el-form-item label="Amount" label-width="120px">
-          <el-input v-model="burnForm.amount" autocomplete="off"></el-input>
-        </el-form-item>
-      </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="burnFormVisible = false">Burn</el-button>
+        <el-button type="primary" @click="burn()">Burn</el-button>
       </div>
     </el-dialog>
   </div>
@@ -90,7 +85,6 @@ export default {
       },
       burnFormVisible: false,
       burnForm: {
-        amount: 0,
         lock: '',
         meta: null,
       },
@@ -151,6 +145,11 @@ export default {
       this.issueForm.lock = row.lock;
       this.issueForm.meta = row.meta;
       this.issueFormVisible = true;
+    },
+    showBurn(row) {
+      this.burnForm.lock = row.lock;
+      this.burnForm.meta = row.meta;
+      this.burnFormVisible = true;
     },
     async issue() {
       if (this.issueForm.amount <= 0) {
@@ -235,7 +234,68 @@ export default {
       };
       
       this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
-    }
+    },
+    async burn() {
+      const rawTx = {
+        version: "0x0",
+        cellDeps: [{
+          outPoint: {
+            txHash: "0x78fbb1d420d242295f8668cb5cf38869adac3500f6d4ce18583ed42ff348fa64",
+            index: "0x0"
+          },
+          depType: "code",
+        }],
+        headerDeps: [],
+        inputs: [],
+        outputs: [],
+        witnesses: [],
+        outputsData: []
+      };
+      if (this.burnForm.meta.deps) {
+        this.burnForm.meta.deps.forEach(dep => {
+          rawTx.cellDeps.push(dep);
+        });
+      }
+      if (this.burnForm.meta.headers) {
+        this.burnForm.meta.headers.forEach(header => {
+          rawTx.headerDeps.push(header);
+        });
+      }
+      const result = await axios.post("http://localhost:50002", {
+        type: "udt",
+        lockHash: this.burnForm.lock,
+        typeCodeHash: "0x48dbf59b4c7ee1547238021b4869bceedf4eea6b43772e5d66ef8865b6ae7212",
+      });
+      for (let i = 0; i < result.data.cells.length; i++) {
+        const element = result.data.cells[i];
+
+        rawTx.inputs.push({
+          previousOutput: {
+            txHash: element.txHash,
+            index: element.index,
+          },
+          since: "0x0",
+        });
+        rawTx.witnesses.push("0x");
+      }
+      rawTx.outputs.push({
+        capacity: `0x${new BN(result.data.totalCKB, 16).sub(new BN(1000)).toString(16)}`,
+        lock: this.burnForm.meta.script,
+      });
+      rawTx.outputsData.push("0x");
+      rawTx.witnesses[0] = {
+        lock: "",
+        inputType: "",
+        outputType: "",
+      };
+
+      const signObj = {
+        target: this.burnForm.lock,
+        tx: rawTx,
+      };
+      
+      this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
+    },
   }
 }
 </script>
