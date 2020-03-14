@@ -22,9 +22,9 @@
       <el-table-column
         label="Operations">
         <template slot-scope="scope">
-          <el-button type="primary" @click="issueFormVisible = true" :disabled="scope.row.lock !== '0x6a242b57227484e904b4e08ba96f19a623c367dcbd18675ec6f2a71a0ff4ec26'" size="small">Issue UDT</el-button>
-          <el-button type="primary" @click="transferFormVisible = true" :disabled="scope.row.udt === '0'" size="small">Transfer UDT</el-button>
-          <el-button type="primary" @click="burnFormVisible = true" :disabled="scope.row.udt === '0'" size="small">Burn UDT</el-button>
+          <el-button type="primary" @click="transferFormVisible = true" v-show="scope.row.udt !== '0'" size="small">Transfer UDT</el-button>
+          <el-button type="primary" @click="burnFormVisible = true" v-show="scope.row.udt !== '0'" size="small">Burn UDT</el-button>
+          <el-button type="primary" @click="showIssue(scope.row)" v-show="scope.row.lock === '0x6a242b57227484e904b4e08ba96f19a623c367dcbd18675ec6f2a71a0ff4ec26'" size="small">Issue UDT</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -35,7 +35,7 @@
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
-        <el-button type="primary" @click="issueFormVisible = false">Issue</el-button>
+        <el-button type="primary" @click="issue()">Issue</el-button>
       </div>
     </el-dialog>
     <el-dialog title="Transfer UDT" :visible.sync="transferFormVisible">
@@ -78,15 +78,21 @@ export default {
       issueFormVisible: false,
       issueForm: {
         amount: 0,
+        lock: '',
+        meta: null,
       },
       transferFormVisible: false,
       transferForm: {
         recipient: '',
         amount: 0,
+        lock: '',
+        meta: null,
       },
       burnFormVisible: false,
       burnForm: {
         amount: 0,
+        lock: '',
+        meta: null,
       },
     }
   },
@@ -107,6 +113,13 @@ export default {
         return false;
       }
       const [type, request] = JSON.parse(e.data.replace('42/keyper,', ''));
+      if (type === "event") {
+        if (request.event === "SEND_TX") {
+          this.issueFormVisible = false;
+          this.burnFormVisible = false;
+          this.transferForm = false;
+        }
+      }
       if (type === "api") {
         if (request.query === "ALL_LOCKS") {
           const locks = request.payload;
@@ -125,6 +138,7 @@ export default {
               lock: lock.hash,
               ckb: new BN(ckb.data.total, 16).toString(),
               udt: new BN(udt.data.total, 16).toString(),
+              meta: lock.meta,
             });
           });
         }
@@ -133,6 +147,95 @@ export default {
     websocketsend(data) {
       this.websock.send(data);
     },
+    showIssue(row) {
+      this.issueForm.lock = row.lock;
+      this.issueForm.meta = row.meta;
+      this.issueFormVisible = true;
+    },
+    async issue() {
+      if (this.issueForm.amount <= 0) {
+        this.issueFormVisible = false;
+        return;
+      }
+      const _cellCapacity = new BN(14200000000);
+      const _fee = new BN(1000);
+      const rawTx = {
+        version: "0x0",
+        cellDeps: [{
+          outPoint: {
+            txHash: "0x78fbb1d420d242295f8668cb5cf38869adac3500f6d4ce18583ed42ff348fa64",
+            index: "0x0"
+          },
+          depType: "code",
+        }],
+        headerDeps: [],
+        inputs: [],
+        outputs: [],
+        witnesses: [],
+        outputsData: []
+      };
+      if (this.issueForm.meta.deps) {
+        this.issueForm.meta.deps.forEach(dep => {
+          rawTx.cellDeps.push(dep);
+        });
+      }
+      if (this.issueForm.meta.headers) {
+        this.issueForm.meta.headers.forEach(header => {
+          rawTx.headerDeps.push(header);
+        });
+      }
+      rawTx.outputs.push({
+        capacity: `0x${_cellCapacity.toString(16)}`,
+        lock: this.issueForm.meta.script,
+        type: {
+          hashType: "data",
+          codeHash: "0x48dbf59b4c7ee1547238021b4869bceedf4eea6b43772e5d66ef8865b6ae7212",
+          args: this.issueForm.lock,
+        },
+      });
+      rawTx.outputsData.push(`0x${new BN(this.issueForm.amount).toArrayLike(Buffer, "le", 16).toString("hex")}`);
+
+      const total = _cellCapacity.add(_fee);
+      const result = await axios.post("http://localhost:50002", {
+        lockHash: this.issueForm.lock,
+        typeHash: "null",
+        data: "0x",
+        capacity: total.toString(),
+      });
+      for (let i = 0; i < result.data.cells.length; i++) {
+        const element = result.data.cells[i];
+      
+        rawTx.inputs.push({
+          previousOutput: {
+            txHash: element.txHash,
+            index: element.index,
+          },
+          since: "0x0",
+        });
+        rawTx.witnesses.push("0x");
+      }
+
+      const resultTotal = new BN(result.data.total, 16);
+      if (resultTotal.gt(total) && resultTotal.sub(total).gt(new BN(6100000000))) {
+        rawTx.outputs.push({
+          capacity: `0x${resultTotal.sub(total).toString(16)}`,
+          lock: this.issueForm.meta.script
+        });
+        rawTx.outputsData.push("0x");
+      }
+      rawTx.witnesses[0] = {
+        lock: "",
+        inputType: "",
+        outputType: "",
+      };
+    
+      const signObj = {
+        target: this.issueForm.lock,
+        tx: rawTx,
+      };
+      
+      this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
+    }
   }
 }
 </script>
