@@ -178,16 +178,6 @@ export default {
         witnesses: [],
         outputsData: []
       };
-      if (this.issueForm.meta.deps) {
-        this.issueForm.meta.deps.forEach(dep => {
-          rawTx.cellDeps.push(dep);
-        });
-      }
-      if (this.issueForm.meta.headers) {
-        this.issueForm.meta.headers.forEach(header => {
-          rawTx.headerDeps.push(header);
-        });
-      }
       rawTx.outputs.push({
         capacity: `0x${_cellCapacity.toString(16)}`,
         lock: this.issueForm.meta.script,
@@ -256,16 +246,6 @@ export default {
         witnesses: [],
         outputsData: []
       };
-      if (this.burnForm.meta.deps) {
-        this.burnForm.meta.deps.forEach(dep => {
-          rawTx.cellDeps.push(dep);
-        });
-      }
-      if (this.burnForm.meta.headers) {
-        this.burnForm.meta.headers.forEach(header => {
-          rawTx.headerDeps.push(header);
-        });
-      }
       const result = await axios.post("http://localhost:50002", {
         type: "udt",
         lockHash: this.burnForm.lock,
@@ -325,16 +305,6 @@ export default {
         witnesses: [],
         outputsData: []
       };
-      if (this.transferForm.meta.deps) {
-        this.transferForm.meta.deps.forEach(dep => {
-          rawTx.cellDeps.push(dep);
-        });
-      }
-      if (this.transferForm.meta.headers) {
-        this.transferForm.meta.headers.forEach(header => {
-          rawTx.headerDeps.push(header);
-        });
-      }
       rawTx.outputs.push({
         capacity: `0x${_cellCapacity.toString(16)}`,
         lock: recipientScript,
