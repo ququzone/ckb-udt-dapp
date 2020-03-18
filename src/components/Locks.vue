@@ -63,6 +63,7 @@
 import BN from "bn.js";
 import axios from "axios";
 const { scriptToAddress, addressToScript } = require("@keyper/specs/lib/address");
+const utils = require("@nervosnetwork/ckb-sdk-utils/lib");
 
 export default {
   name: 'Locks',
@@ -287,7 +288,9 @@ export default {
         return;
       }
       const recipientScript = addressToScript(this.transferForm.recipient);
-      const _cellCapacity = new BN(14200000000);
+
+      let _cellCapacity = new BN(14200000000);
+      let _outCellCapacity = new BN(14200000000);
       const _fee = new BN(1000);
       const amount = new BN(this.transferForm.amount);
       const rawTx = {
@@ -305,8 +308,38 @@ export default {
         witnesses: [],
         outputsData: []
       };
+      let isAny = false;
+      if (recipientScript.codeHash == "0x390e1c7cb59fbd5cf9bfb9370acb0d2bbbbbcf4136c90b2f3ea5277b4c13b540") {
+        let anyResult = await axios.post("http://localhost:50002", {
+          lockHash: utils.scriptToHash(recipientScript),
+          typeCodeHash: "0x48dbf59b4c7ee1547238021b4869bceedf4eea6b43772e5d66ef8865b6ae7212",
+        });
+        if (anyResult.data.cells.length === 0) {
+          console.log("cell not exist");
+          this.transferFormVisible = false;
+          return;
+        }
+        isAny = true;
+        rawTx.cellDeps.push({
+          outPoint: {
+            txHash: "0xf860285b77069801f91d32a316bf07c8caee7ff1ab39b506d6708de7dd88595f",
+            index: "0x0"
+          },
+          depType: "depGroup",
+        });
+        rawTx.inputs.push({
+          previousOutput: {
+            txHash: anyResult.data.cells[0].txHash,
+            index: anyResult.data.cells[0].index,
+          },
+          since: "0x0",
+        });
+        rawTx.witnesses.push("0x");
+        amount.add(new BN(anyResult.data.cells[0].data.slice(2), 16, "le"));
+        _outCellCapacity = new BN(anyResult.data.cells[0].capacity.slice(2), 16);
+      }
       rawTx.outputs.push({
-        capacity: `0x${_cellCapacity.toString(16)}`,
+        capacity: `0x${_outCellCapacity.toString(16)}`,
         lock: recipientScript,
         type: {
           hashType: "data",
@@ -334,7 +367,12 @@ export default {
         rawTx.witnesses.push("0x");
       }
 
-      let totalCKB = _cellCapacity.add(_fee);
+      let totalCKB;
+      if (isAny) {
+        totalCKB = _fee;
+      } else {
+        totalCKB = _cellCapacity.add(_fee);
+      }
       let total = new BN(result.data.total, 16);
       let gatheredCKB = new BN(result.data.totalCKB, 16);
       if (total.gt(amount)) {
@@ -383,15 +421,27 @@ export default {
         rawTx.outputsData.push("0x");
       }
 
-      rawTx.witnesses[0] = {
-        lock: "",
-        inputType: "",
-        outputType: "",
-      };
+      let config;
+      if (isAny) {
+        config = {index: 1, length: rawTx.witnesses.length-1};
+        rawTx.witnesses[1] = {
+          lock: "",
+          inputType: "",
+          outputType: "",
+        };
+      } else {
+        config = {index: 0, length: -1};
+        rawTx.witnesses[0] = {
+          lock: "",
+          inputType: "",
+          outputType: "",
+        };
+      }
 
       const signObj = {
         target: this.transferForm.lock,
         tx: rawTx,
+        config,
       };
       
       this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
