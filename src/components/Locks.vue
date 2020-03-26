@@ -101,7 +101,7 @@ export default {
       this.websock.onopen = this.websocketonopen;
     },
     websocketonopen() {
-      this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload": {"method": "ALL_LOCKS"}}, "type":"query"}]`);
+      this.websocketsend(`42/keyper,["api", {"data": {"origin": "udt-dapp-origin", "payload": {"method": "ALL_LOCKS"}}, "type":"query"}]`);
     },
     async websocketonmessage(e) {
       if (e.data.indexOf('42/keyper') === -1) {
@@ -168,7 +168,7 @@ export default {
         version: "0x0",
         cellDeps: [{
           outPoint: {
-            txHash: "0x78fbb1d420d242295f8668cb5cf38869adac3500f6d4ce18583ed42ff348fa64",
+            txHash: "0xa18868d6dc6bd7b1a40a515dd801709baec6f64fdf9455e3f9f4c6393b9e8477",
             index: "0x0"
           },
           depType: "code",
@@ -229,14 +229,14 @@ export default {
         tx: rawTx,
       };
       
-      this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
+      this.websocketsend(`42/keyper,["api", {"data": {"origin": "udt-dapp-origin", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
     },
     async burn() {
       const rawTx = {
         version: "0x0",
         cellDeps: [{
           outPoint: {
-            txHash: "0x78fbb1d420d242295f8668cb5cf38869adac3500f6d4ce18583ed42ff348fa64",
+            txHash: "0xa18868d6dc6bd7b1a40a515dd801709baec6f64fdf9455e3f9f4c6393b9e8477",
             index: "0x0"
           },
           depType: "code",
@@ -280,7 +280,7 @@ export default {
         tx: rawTx,
       };
       
-      this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
+      this.websocketsend(`42/keyper,["api", {"data": {"origin": "udt-dapp-origin", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
     },
     async transfer() {
       if (this.transferForm.amount <= 0) {
@@ -297,7 +297,7 @@ export default {
         version: "0x0",
         cellDeps: [{
           outPoint: {
-            txHash: "0x78fbb1d420d242295f8668cb5cf38869adac3500f6d4ce18583ed42ff348fa64",
+            txHash: "0xa18868d6dc6bd7b1a40a515dd801709baec6f64fdf9455e3f9f4c6393b9e8477",
             index: "0x0"
           },
           depType: "code",
@@ -309,7 +309,7 @@ export default {
         outputsData: []
       };
       let isAny = false;
-      if (recipientScript.codeHash == "0x390e1c7cb59fbd5cf9bfb9370acb0d2bbbbbcf4136c90b2f3ea5277b4c13b540") {
+      if (recipientScript.codeHash == "0x6a3982f9d018be7e7228f9e0b765f28ceff6d36e634490856d2b186acf78e79b") {
         let anyResult = await axios.post("http://localhost:50002", {
           lockHash: utils.scriptToHash(recipientScript),
           typeCodeHash: "0x48dbf59b4c7ee1547238021b4869bceedf4eea6b43772e5d66ef8865b6ae7212",
@@ -322,7 +322,7 @@ export default {
         isAny = true;
         rawTx.cellDeps.push({
           outPoint: {
-            txHash: "0xf860285b77069801f91d32a316bf07c8caee7ff1ab39b506d6708de7dd88595f",
+            txHash: "0x9af66408df4703763acb10871365e4a21f2c3d3bdc06b0ae634a3ad9f18a6525",
             index: "0x0"
           },
           depType: "depGroup",
@@ -444,7 +444,7 @@ export default {
         config,
       };
       
-      this.websocketsend(`42/keyper,["api", {"data": {"origin": "localhost", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
+      this.websocketsend(`42/keyper,["api", {"data": {"origin": "udt-dapp-origin", "payload":${JSON.stringify(signObj)}}, "type":"sign"}]`);
     },
   }
 }
